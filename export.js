@@ -1,4 +1,4 @@
-var kaop = require("k-oop");
+var kaop = require("kaop");
 var EJS = require("ejs");
 ejs.delimiter = '?';
 kaop.annotations.locals.ResourceAdapter = require("./src/common/ResourceAdapter");

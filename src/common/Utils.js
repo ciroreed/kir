@@ -1,4 +1,4 @@
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 
 var Utils = Class.static({
   staticId: 1,

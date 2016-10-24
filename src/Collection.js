@@ -1,6 +1,6 @@
 var EventEmitter = require("./common/EventEmitter");
 var Model = require("./Model");
-var Class = require("k-oop").Class
+var Class = require("kaop").Class
 
 var Collection = Class.inherits(EventEmitter, {
   config: null,

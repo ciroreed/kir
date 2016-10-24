@@ -1,4 +1,4 @@
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 
 var HttpRequest = Class({
   xhttp: null,

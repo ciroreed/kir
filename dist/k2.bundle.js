@@ -1,5 +1,5 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var kaop = require("k-oop");
+var kaop = require("kaop");
 var EJS = require("ejs");
 ejs.delimiter = '?';
 kaop.annotations.locals.ResourceAdapter = require("./src/common/ResourceAdapter");
@@ -20,7 +20,7 @@ if (window) {
   module.exports = types;
 }
 
-},{"./src/Collection":11,"./src/Component":12,"./src/Model":13,"./src/View":14,"./src/common/ResourceAdapter":17,"./src/common/customAnnotations":19,"ejs":5,"k-oop":8}],2:[function(require,module,exports){
+},{"./src/Collection":11,"./src/Component":12,"./src/Model":13,"./src/View":14,"./src/common/ResourceAdapter":17,"./src/common/customAnnotations":19,"ejs":5,"kaop":8}],2:[function(require,module,exports){
 
 },{}],3:[function(require,module,exports){
 (function (process){
@@ -1627,7 +1627,7 @@ module.exports = annotations = {
 },{}],11:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
 var Model = require("./Model");
-var Class = require("k-oop").Class
+var Class = require("kaop").Class
 
 var Collection = Class.inherits(EventEmitter, {
   config: null,
@@ -1704,9 +1704,9 @@ var Collection = Class.inherits(EventEmitter, {
 
 module.exports = Collection;
 
-},{"./Model":13,"./common/EventEmitter":15,"k-oop":8}],12:[function(require,module,exports){
+},{"./Model":13,"./common/EventEmitter":15,"kaop":8}],12:[function(require,module,exports){
 var Utils = require("./common/Utils");
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 var View = require("./View");
 
 var Component = Class.inherits(View, {
@@ -1740,9 +1740,9 @@ var Component = Class.inherits(View, {
 
 module.exports = Component;
 
-},{"./View":14,"./common/Utils":18,"k-oop":8}],13:[function(require,module,exports){
+},{"./View":14,"./common/Utils":18,"kaop":8}],13:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 
 var Model = Class.inherits(EventEmitter, {
   attributes: null,
@@ -1770,9 +1770,9 @@ var Model = Class.inherits(EventEmitter, {
 
 module.exports = Model;
 
-},{"./common/EventEmitter":15,"k-oop":8}],14:[function(require,module,exports){
+},{"./common/EventEmitter":15,"kaop":8}],14:[function(require,module,exports){
 var Utils = require("./common/Utils");
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 
 var View = Class({
   path: null,
@@ -1818,8 +1818,8 @@ var View = Class({
 
 module.exports = View;
 
-},{"./common/Utils":18,"k-oop":8}],15:[function(require,module,exports){
-var Class = require("k-oop").Class;
+},{"./common/Utils":18,"kaop":8}],15:[function(require,module,exports){
+var Class = require("kaop").Class;
 
 var EventEmitter = Class({
   actions: [],
@@ -1854,8 +1854,8 @@ var EventEmitter = Class({
 
 module.exports = EventEmitter;
 
-},{"k-oop":8}],16:[function(require,module,exports){
-var Class = require("k-oop").Class;
+},{"kaop":8}],16:[function(require,module,exports){
+var Class = require("kaop").Class;
 
 var HttpRequest = Class({
   xhttp: null,
@@ -1904,8 +1904,8 @@ var HttpRequest = Class({
 
 module.exports = HttpRequest;
 
-},{"k-oop":8}],17:[function(require,module,exports){
-var Class = require("k-oop").Class;
+},{"kaop":8}],17:[function(require,module,exports){
+var Class = require("kaop").Class;
 var HttpRequest = require("./HttpRequest");
 
 var ResourceAdapter = Class.static({
@@ -1957,8 +1957,8 @@ var ResourceAdapter = Class.static({
 
 module.exports = ResourceAdapter;
 
-},{"./HttpRequest":16,"k-oop":8}],18:[function(require,module,exports){
-var Class = require("k-oop").Class;
+},{"./HttpRequest":16,"kaop":8}],18:[function(require,module,exports){
+var Class = require("kaop").Class;
 
 var Utils = Class.static({
   staticId: 1,
@@ -2008,7 +2008,7 @@ var Utils = Class.static({
 
 module.exports = Utils;
 
-},{"k-oop":8}],19:[function(require,module,exports){
+},{"kaop":8}],19:[function(require,module,exports){
 module.exports = [
   function $jsonParse(index) {
     this.before(function(opts, next) {

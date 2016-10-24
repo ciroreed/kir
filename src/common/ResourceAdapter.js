@@ -1,4 +1,4 @@
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 var HttpRequest = require("./HttpRequest");
 
 var ResourceAdapter = Class.static({

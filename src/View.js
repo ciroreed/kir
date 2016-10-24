@@ -1,5 +1,5 @@
 var Utils = require("./common/Utils");
-var Class = require("k-oop").Class;
+var Class = require("kaop").Class;
 
 var View = Class({
   path: null,
