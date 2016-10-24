@@ -1,6 +1,6 @@
 {
   "name": "kir",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "early framework for web apps",
   "main": "index.js",
   "scripts": {
