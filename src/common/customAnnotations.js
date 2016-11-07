@@ -33,7 +33,7 @@ module.exports = [
   function $compileTpl(key) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = EJS.compile(opts.scope[key], {
+        opts.scope.compileFn = ejs.compile(opts.scope[key], {
           context: opts.scope
         });
       }

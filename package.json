@@ -4,11 +4,13 @@
   "description": "early framework for web apps",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "browserify ./export.js -o ./dist/k2.bundle.js"
   },
   "author": "ciroreed",
   "license": "ISC",
   "dependencies": {
-    "kaop": "^2.2.6"
+    "ejs": "^2.5.2",
+    "kaop": "^2.3.8"
   }
 }

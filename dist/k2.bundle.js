@@ -1,9 +1,11 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var kaop = require("kaop");
-var EJS = require("ejs");
+var ejs = require("ejs");
+var TagPool = require("./src/common/TagPool");
+
 ejs.delimiter = '?';
 kaop.annotations.locals.ResourceAdapter = require("./src/common/ResourceAdapter");
-kaop.annotations.locals.EJS = EJS;
+kaop.annotations.locals.ejs = ejs;
 require("./src/common/customAnnotations").forEach(kaop.annotations.add, annotations);
 
 var types = {
@@ -14,425 +16,14 @@ var types = {
   Class: kaop.Class
 };
 
-if (window) {
+if (typeof window === "object") {
   window.k2 = types;
+  TagPool.add("k-include", require("./src/tag/k-include"));
 } else {
   module.exports = types;
 }
 
-},{"./src/Collection":11,"./src/Component":12,"./src/Model":13,"./src/View":14,"./src/common/ResourceAdapter":17,"./src/common/customAnnotations":19,"ejs":5,"kaop":8}],2:[function(require,module,exports){
-
-},{}],3:[function(require,module,exports){
-(function (process){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-// resolves . and .. elements in a path array with directory names there
-// must be no slashes, empty elements, or device names (c:\) in the array
-// (so also no leading and trailing slashes - it does not distinguish
-// relative and absolute paths)
-function normalizeArray(parts, allowAboveRoot) {
-  // if the path tries to go above the root, `up` ends up > 0
-  var up = 0;
-  for (var i = parts.length - 1; i >= 0; i--) {
-    var last = parts[i];
-    if (last === '.') {
-      parts.splice(i, 1);
-    } else if (last === '..') {
-      parts.splice(i, 1);
-      up++;
-    } else if (up) {
-      parts.splice(i, 1);
-      up--;
-    }
-  }
-
-  // if the path is allowed to go above the root, restore leading ..s
-  if (allowAboveRoot) {
-    for (; up--; up) {
-      parts.unshift('..');
-    }
-  }
-
-  return parts;
-}
-
-// Split a filename into [root, dir, basename, ext], unix version
-// 'root' is just a slash, or nothing.
-var splitPathRe =
-    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
-var splitPath = function(filename) {
-  return splitPathRe.exec(filename).slice(1);
-};
-
-// path.resolve([from ...], to)
-// posix version
-exports.resolve = function() {
-  var resolvedPath = '',
-      resolvedAbsolute = false;
-
-  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-    var path = (i >= 0) ? arguments[i] : process.cwd();
-
-    // Skip empty and invalid entries
-    if (typeof path !== 'string') {
-      throw new TypeError('Arguments to path.resolve must be strings');
-    } else if (!path) {
-      continue;
-    }
-
-    resolvedPath = path + '/' + resolvedPath;
-    resolvedAbsolute = path.charAt(0) === '/';
-  }
-
-  // At this point the path should be resolved to a full absolute path, but
-  // handle relative paths to be safe (might happen when process.cwd() fails)
-
-  // Normalize the path
-  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
-    return !!p;
-  }), !resolvedAbsolute).join('/');
-
-  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
-};
-
-// path.normalize(path)
-// posix version
-exports.normalize = function(path) {
-  var isAbsolute = exports.isAbsolute(path),
-      trailingSlash = substr(path, -1) === '/';
-
-  // Normalize the path
-  path = normalizeArray(filter(path.split('/'), function(p) {
-    return !!p;
-  }), !isAbsolute).join('/');
-
-  if (!path && !isAbsolute) {
-    path = '.';
-  }
-  if (path && trailingSlash) {
-    path += '/';
-  }
-
-  return (isAbsolute ? '/' : '') + path;
-};
-
-// posix version
-exports.isAbsolute = function(path) {
-  return path.charAt(0) === '/';
-};
-
-// posix version
-exports.join = function() {
-  var paths = Array.prototype.slice.call(arguments, 0);
-  return exports.normalize(filter(paths, function(p, index) {
-    if (typeof p !== 'string') {
-      throw new TypeError('Arguments to path.join must be strings');
-    }
-    return p;
-  }).join('/'));
-};
-
-
-// path.relative(from, to)
-// posix version
-exports.relative = function(from, to) {
-  from = exports.resolve(from).substr(1);
-  to = exports.resolve(to).substr(1);
-
-  function trim(arr) {
-    var start = 0;
-    for (; start < arr.length; start++) {
-      if (arr[start] !== '') break;
-    }
-
-    var end = arr.length - 1;
-    for (; end >= 0; end--) {
-      if (arr[end] !== '') break;
-    }
-
-    if (start > end) return [];
-    return arr.slice(start, end - start + 1);
-  }
-
-  var fromParts = trim(from.split('/'));
-  var toParts = trim(to.split('/'));
-
-  var length = Math.min(fromParts.length, toParts.length);
-  var samePartsLength = length;
-  for (var i = 0; i < length; i++) {
-    if (fromParts[i] !== toParts[i]) {
-      samePartsLength = i;
-      break;
-    }
-  }
-
-  var outputParts = [];
-  for (var i = samePartsLength; i < fromParts.length; i++) {
-    outputParts.push('..');
-  }
-
-  outputParts = outputParts.concat(toParts.slice(samePartsLength));
-
-  return outputParts.join('/');
-};
-
-exports.sep = '/';
-exports.delimiter = ':';
-
-exports.dirname = function(path) {
-  var result = splitPath(path),
-      root = result[0],
-      dir = result[1];
-
-  if (!root && !dir) {
-    // No dirname whatsoever
-    return '.';
-  }
-
-  if (dir) {
-    // It has a dirname, strip trailing slash
-    dir = dir.substr(0, dir.length - 1);
-  }
-
-  return root + dir;
-};
-
-
-exports.basename = function(path, ext) {
-  var f = splitPath(path)[2];
-  // TODO: make this comparison case-insensitive on windows?
-  if (ext && f.substr(-1 * ext.length) === ext) {
-    f = f.substr(0, f.length - ext.length);
-  }
-  return f;
-};
-
-
-exports.extname = function(path) {
-  return splitPath(path)[3];
-};
-
-function filter (xs, f) {
-    if (xs.filter) return xs.filter(f);
-    var res = [];
-    for (var i = 0; i < xs.length; i++) {
-        if (f(xs[i], i, xs)) res.push(xs[i]);
-    }
-    return res;
-}
-
-// String.prototype.substr - negative index don't work in IE8
-var substr = 'ab'.substr(-1) === 'b'
-    ? function (str, start, len) { return str.substr(start, len) }
-    : function (str, start, len) {
-        if (start < 0) start = str.length + start;
-        return str.substr(start, len);
-    }
-;
-
-}).call(this,require('_process'))
-},{"_process":4}],4:[function(require,module,exports){
-// shim for using process in browser
-var process = module.exports = {};
-
-// cached from whatever global is present so that test runners that stub it
-// don't break things.  But we need to wrap it in a try catch in case it is
-// wrapped in strict mode code which doesn't define any globals.  It's inside a
-// function because try/catches deoptimize in certain engines.
-
-var cachedSetTimeout;
-var cachedClearTimeout;
-
-function defaultSetTimout() {
-    throw new Error('setTimeout has not been defined');
-}
-function defaultClearTimeout () {
-    throw new Error('clearTimeout has not been defined');
-}
-(function () {
-    try {
-        if (typeof setTimeout === 'function') {
-            cachedSetTimeout = setTimeout;
-        } else {
-            cachedSetTimeout = defaultSetTimout;
-        }
-    } catch (e) {
-        cachedSetTimeout = defaultSetTimout;
-    }
-    try {
-        if (typeof clearTimeout === 'function') {
-            cachedClearTimeout = clearTimeout;
-        } else {
-            cachedClearTimeout = defaultClearTimeout;
-        }
-    } catch (e) {
-        cachedClearTimeout = defaultClearTimeout;
-    }
-} ())
-function runTimeout(fun) {
-    if (cachedSetTimeout === setTimeout) {
-        //normal enviroments in sane situations
-        return setTimeout(fun, 0);
-    }
-    // if setTimeout wasn't available but was latter defined
-    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-        cachedSetTimeout = setTimeout;
-        return setTimeout(fun, 0);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedSetTimeout(fun, 0);
-    } catch(e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-            return cachedSetTimeout.call(null, fun, 0);
-        } catch(e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-            return cachedSetTimeout.call(this, fun, 0);
-        }
-    }
-
-
-}
-function runClearTimeout(marker) {
-    if (cachedClearTimeout === clearTimeout) {
-        //normal enviroments in sane situations
-        return clearTimeout(marker);
-    }
-    // if clearTimeout wasn't available but was latter defined
-    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-        cachedClearTimeout = clearTimeout;
-        return clearTimeout(marker);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedClearTimeout(marker);
-    } catch (e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-            return cachedClearTimeout.call(null, marker);
-        } catch (e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-            return cachedClearTimeout.call(this, marker);
-        }
-    }
-
-
-
-}
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
-
-function cleanUpNextTick() {
-    if (!draining || !currentQueue) {
-        return;
-    }
-    draining = false;
-    if (currentQueue.length) {
-        queue = currentQueue.concat(queue);
-    } else {
-        queueIndex = -1;
-    }
-    if (queue.length) {
-        drainQueue();
-    }
-}
-
-function drainQueue() {
-    if (draining) {
-        return;
-    }
-    var timeout = runTimeout(cleanUpNextTick);
-    draining = true;
-
-    var len = queue.length;
-    while(len) {
-        currentQueue = queue;
-        queue = [];
-        while (++queueIndex < len) {
-            if (currentQueue) {
-                currentQueue[queueIndex].run();
-            }
-        }
-        queueIndex = -1;
-        len = queue.length;
-    }
-    currentQueue = null;
-    draining = false;
-    runClearTimeout(timeout);
-}
-
-process.nextTick = function (fun) {
-    var args = new Array(arguments.length - 1);
-    if (arguments.length > 1) {
-        for (var i = 1; i < arguments.length; i++) {
-            args[i - 1] = arguments[i];
-        }
-    }
-    queue.push(new Item(fun, args));
-    if (queue.length === 1 && !draining) {
-        runTimeout(drainQueue);
-    }
-};
-
-// v8 likes predictible objects
-function Item(fun, array) {
-    this.fun = fun;
-    this.array = array;
-}
-Item.prototype.run = function () {
-    this.fun.apply(null, this.array);
-};
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-process.umask = function() { return 0; };
-
-},{}],5:[function(require,module,exports){
+},{"./src/Collection":8,"./src/Component":9,"./src/Model":10,"./src/View":11,"./src/common/ResourceAdapter":14,"./src/common/TagPool":15,"./src/common/customAnnotations":17,"./src/tag/k-include":19,"ejs":2,"kaop":5}],2:[function(require,module,exports){
 /*
  * EJS Embedded JavaScript templates
  * Copyright 2112 Matthew Eernisse (mde@fleegix.org)
@@ -1233,7 +824,7 @@ if (typeof window != 'undefined') {
   window.ejs = exports;
 }
 
-},{"../package.json":7,"./utils":6,"fs":2,"path":3}],6:[function(require,module,exports){
+},{"../package.json":4,"./utils":3,"fs":20,"path":21}],3:[function(require,module,exports){
 /*
  * EJS Embedded JavaScript templates
  * Copyright 2112 Matthew Eernisse (mde@fleegix.org)
@@ -1376,7 +967,7 @@ exports.cache = {
 };
 
 
-},{}],7:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 module.exports={
   "name": "ejs",
   "description": "Embedded JavaScript templates",
@@ -1432,7 +1023,7 @@ module.exports={
   "_id": "ejs@2.5.2",
   "_shasum": "21444ba09386f0c65b6eafb96a3d51bcb3be80d1",
   "_resolved": "https://registry.npmjs.org/ejs/-/ejs-2.5.2.tgz",
-  "_from": "ejs@>=2.5.2 <3.0.0",
+  "_from": "ejs@latest",
   "_npmVersion": "2.14.7",
   "_nodeVersion": "4.2.2",
   "_npmUser": {
@@ -1461,22 +1052,26 @@ module.exports={
   "readme": "ERROR: No README data found!"
 }
 
-},{}],8:[function(require,module,exports){
-module.exports = {
-  annotations: require("./src/annotations"),
-  Class: require("./src/Class")
-};
+},{}],5:[function(require,module,exports){
+var Class = require("./src/Class");
+var annotations = require("./src/annotations");
 
-},{"./src/Class":9,"./src/annotations":10}],9:[function(require,module,exports){
+if (typeof module === "object") {
+  module.exports = {
+    Class: Class,
+    annotations: annotations
+  };
+} else {
+  window.Class = Class;
+  window.annotations = annotations;
+}
+
+},{"./src/Class":6,"./src/annotations":7}],6:[function(require,module,exports){
 var annotations = require("./annotations");
 
 var Class = function(sourceClass, extendedProperties, static) {
 
-  var inheritedProperties = {};
-
-  for (var protoKey in sourceClass.prototype) {
-    inheritedProperties[protoKey] = sourceClass.prototype[protoKey];
-  }
+  var inheritedProperties = Object.create(sourceClass.prototype);
 
   for (var propertyName in extendedProperties) {
     inheritedProperties[propertyName] = annotations.compile(sourceClass, propertyName, extendedProperties[propertyName]);
@@ -1484,11 +1079,17 @@ var Class = function(sourceClass, extendedProperties, static) {
 
   if (!static) {
     var extendedClass = function() {
-      if (typeof this.constructor === "function") this.constructor.apply(this, arguments);
-      for (var propertyName in this) {
-        if (typeof this[propertyName] === "function") {
-          this[propertyName] = this[propertyName].bind(this);
+      try {
+        if (typeof this.constructor === "function") this.constructor.apply(this, arguments);
+
+        for (var propertyName in this) {
+          if (typeof this[propertyName] === "function") {
+            this[propertyName] = this[propertyName].bind(this);
+          }
         }
+
+      } finally {
+        return this;
       }
     };
 
@@ -1509,7 +1110,7 @@ exp.static = function(mainProps) {
 
 module.exports = exp;
 
-},{"./annotations":10}],10:[function(require,module,exports){
+},{"./annotations":7}],7:[function(require,module,exports){
 module.exports = annotations = {
   arr: [
     function $override() {
@@ -1624,7 +1225,7 @@ module.exports = annotations = {
   }
 };
 
-},{}],11:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
 var Model = require("./Model");
 var Class = require("kaop").Class
@@ -1704,7 +1305,7 @@ var Collection = Class.inherits(EventEmitter, {
 
 module.exports = Collection;
 
-},{"./Model":13,"./common/EventEmitter":15,"kaop":8}],12:[function(require,module,exports){
+},{"./Model":10,"./common/EventEmitter":12,"kaop":5}],9:[function(require,module,exports){
 var Utils = require("./common/Utils");
 var Class = require("kaop").Class;
 var View = require("./View");
@@ -1740,7 +1341,7 @@ var Component = Class.inherits(View, {
 
 module.exports = Component;
 
-},{"./View":14,"./common/Utils":18,"kaop":8}],13:[function(require,module,exports){
+},{"./View":11,"./common/Utils":16,"kaop":5}],10:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
 var Class = require("kaop").Class;
 
@@ -1770,7 +1371,7 @@ var Model = Class.inherits(EventEmitter, {
 
 module.exports = Model;
 
-},{"./common/EventEmitter":15,"kaop":8}],14:[function(require,module,exports){
+},{"./common/EventEmitter":12,"kaop":5}],11:[function(require,module,exports){
 var Utils = require("./common/Utils");
 var Class = require("kaop").Class;
 
@@ -1818,7 +1419,7 @@ var View = Class({
 
 module.exports = View;
 
-},{"./common/Utils":18,"kaop":8}],15:[function(require,module,exports){
+},{"./common/Utils":16,"kaop":5}],12:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var EventEmitter = Class({
@@ -1854,7 +1455,7 @@ var EventEmitter = Class({
 
 module.exports = EventEmitter;
 
-},{"kaop":8}],16:[function(require,module,exports){
+},{"kaop":5}],13:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var HttpRequest = Class({
@@ -1904,7 +1505,7 @@ var HttpRequest = Class({
 
 module.exports = HttpRequest;
 
-},{"kaop":8}],17:[function(require,module,exports){
+},{"kaop":5}],14:[function(require,module,exports){
 var Class = require("kaop").Class;
 var HttpRequest = require("./HttpRequest");
 
@@ -1957,7 +1558,20 @@ var ResourceAdapter = Class.static({
 
 module.exports = ResourceAdapter;
 
-},{"./HttpRequest":16,"kaop":8}],18:[function(require,module,exports){
+},{"./HttpRequest":13,"kaop":5}],15:[function(require,module,exports){
+var Class = require("kaop").Class;
+
+var TagPool = Class.static({
+  add: function(tag, constructor) {
+    document.registerElement(tag, {
+      prototype: new constructor()
+    });
+  }
+});
+
+module.exports = TagPool;
+
+},{"kaop":5}],16:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var Utils = Class.static({
@@ -2008,7 +1622,7 @@ var Utils = Class.static({
 
 module.exports = Utils;
 
-},{"kaop":8}],19:[function(require,module,exports){
+},{"kaop":5}],17:[function(require,module,exports){
 module.exports = [
   function $jsonParse(index) {
     this.before(function(opts, next) {
@@ -2044,7 +1658,7 @@ module.exports = [
   function $compileTpl(key) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = EJS.compile(opts.scope[key], {
+        opts.scope.compileFn = ejs.compile(opts.scope[key], {
           context: opts.scope
         });
       }
@@ -2053,5 +1667,403 @@ module.exports = [
     });
   }
 ];
+
+},{}],18:[function(require,module,exports){
+var Class = require("kaop").Class;
+
+var KBase = Class.inherits(HTMLElement, {
+  _shadow: null,
+  init: function(template, style) {
+    this._shadow = this.attachShadow({
+      mode: "open"
+    });
+    this.append(style);
+    this.append(template);
+  },
+  append: function(rawHtml) {
+    if (rawHtml) {
+      this._shadow.innerHTML += rawHtml;
+    }
+  },
+  attr: function(k, value) {
+    if (!value) {
+      return this.getAttribute(k);
+    } else {
+      return this.setAttribute(k, value);
+    }
+  },
+  on: function(evt, handler) {
+    var eventSplit = evt.split(" ");
+    var targets = this.q(eventSplit[1], true);
+    for (var i = 0; i < targets.length; i++) {
+      targets[i].addEventListener(eventSplit[0], handler.bind(this));
+    }
+  },
+  off: function(evt, handler) {
+    var eventSplit = evt.split(" ");
+    this.q(eventSplit[1]).removeEventListener(eventSplit[0], handler);
+  },
+  trigger: function(eventName) {
+    var evt = new Event(eventName);
+    evt.target = this;
+    this.dispatchEvent(evt);
+  },
+  q: function(selector) {
+    return this._shadow.querySelector(selector);
+  },
+  qq: function(selector) {
+    return this.querySelector(selector);
+  }
+});
+
+module.exports = KBase;
+
+},{"kaop":5}],19:[function(require,module,exports){
+var Class = require("kaop").Class;
+var KBase = require("./k-base");
+
+var KInclude = Class.inherits(KBase, {
+  attachedCallback: function() {
+    this.init();
+    this.path = this.attr("path");
+    this.loadTemplate();
+  },
+  loadTemplate: ["$GET: 'path', true", function(templateStr) {
+    this.append(templateStr);
+  }]
+});
+
+module.exports = KInclude;
+
+},{"./k-base":18,"kaop":5}],20:[function(require,module,exports){
+
+},{}],21:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var last = parts[i];
+    if (last === '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// Split a filename into [root, dir, basename, ext], unix version
+// 'root' is just a slash, or nothing.
+var splitPathRe =
+    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+var splitPath = function(filename) {
+  return splitPathRe.exec(filename).slice(1);
+};
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+  var resolvedPath = '',
+      resolvedAbsolute = false;
+
+  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+    var path = (i >= 0) ? arguments[i] : process.cwd();
+
+    // Skip empty and invalid entries
+    if (typeof path !== 'string') {
+      throw new TypeError('Arguments to path.resolve must be strings');
+    } else if (!path) {
+      continue;
+    }
+
+    resolvedPath = path + '/' + resolvedPath;
+    resolvedAbsolute = path.charAt(0) === '/';
+  }
+
+  // At this point the path should be resolved to a full absolute path, but
+  // handle relative paths to be safe (might happen when process.cwd() fails)
+
+  // Normalize the path
+  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+  var isAbsolute = exports.isAbsolute(path),
+      trailingSlash = substr(path, -1) === '/';
+
+  // Normalize the path
+  path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+
+  return (isAbsolute ? '/' : '') + path;
+};
+
+// posix version
+exports.isAbsolute = function(path) {
+  return path.charAt(0) === '/';
+};
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    if (typeof p !== 'string') {
+      throw new TypeError('Arguments to path.join must be strings');
+    }
+    return p;
+  }).join('/'));
+};
+
+
+// path.relative(from, to)
+// posix version
+exports.relative = function(from, to) {
+  from = exports.resolve(from).substr(1);
+  to = exports.resolve(to).substr(1);
+
+  function trim(arr) {
+    var start = 0;
+    for (; start < arr.length; start++) {
+      if (arr[start] !== '') break;
+    }
+
+    var end = arr.length - 1;
+    for (; end >= 0; end--) {
+      if (arr[end] !== '') break;
+    }
+
+    if (start > end) return [];
+    return arr.slice(start, end - start + 1);
+  }
+
+  var fromParts = trim(from.split('/'));
+  var toParts = trim(to.split('/'));
+
+  var length = Math.min(fromParts.length, toParts.length);
+  var samePartsLength = length;
+  for (var i = 0; i < length; i++) {
+    if (fromParts[i] !== toParts[i]) {
+      samePartsLength = i;
+      break;
+    }
+  }
+
+  var outputParts = [];
+  for (var i = samePartsLength; i < fromParts.length; i++) {
+    outputParts.push('..');
+  }
+
+  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+  return outputParts.join('/');
+};
+
+exports.sep = '/';
+exports.delimiter = ':';
+
+exports.dirname = function(path) {
+  var result = splitPath(path),
+      root = result[0],
+      dir = result[1];
+
+  if (!root && !dir) {
+    // No dirname whatsoever
+    return '.';
+  }
+
+  if (dir) {
+    // It has a dirname, strip trailing slash
+    dir = dir.substr(0, dir.length - 1);
+  }
+
+  return root + dir;
+};
+
+
+exports.basename = function(path, ext) {
+  var f = splitPath(path)[2];
+  // TODO: make this comparison case-insensitive on windows?
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+
+exports.extname = function(path) {
+  return splitPath(path)[3];
+};
+
+function filter (xs, f) {
+    if (xs.filter) return xs.filter(f);
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (f(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// String.prototype.substr - negative index don't work in IE8
+var substr = 'ab'.substr(-1) === 'b'
+    ? function (str, start, len) { return str.substr(start, len) }
+    : function (str, start, len) {
+        if (start < 0) start = str.length + start;
+        return str.substr(start, len);
+    }
+;
+
+}).call(this,require('_process'))
+},{"_process":22}],22:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+// cached from whatever global is present so that test runners that stub it don't break things.
+var cachedSetTimeout = setTimeout;
+var cachedClearTimeout = clearTimeout;
+
+var queue = [];
+var draining = false;
+var currentQueue;
+var queueIndex = -1;
+
+function cleanUpNextTick() {
+    if (!draining || !currentQueue) {
+        return;
+    }
+    draining = false;
+    if (currentQueue.length) {
+        queue = currentQueue.concat(queue);
+    } else {
+        queueIndex = -1;
+    }
+    if (queue.length) {
+        drainQueue();
+    }
+}
+
+function drainQueue() {
+    if (draining) {
+        return;
+    }
+    var timeout = cachedSetTimeout(cleanUpNextTick);
+    draining = true;
+
+    var len = queue.length;
+    while(len) {
+        currentQueue = queue;
+        queue = [];
+        while (++queueIndex < len) {
+            if (currentQueue) {
+                currentQueue[queueIndex].run();
+            }
+        }
+        queueIndex = -1;
+        len = queue.length;
+    }
+    currentQueue = null;
+    draining = false;
+    cachedClearTimeout(timeout);
+}
+
+process.nextTick = function (fun) {
+    var args = new Array(arguments.length - 1);
+    if (arguments.length > 1) {
+        for (var i = 1; i < arguments.length; i++) {
+            args[i - 1] = arguments[i];
+        }
+    }
+    queue.push(new Item(fun, args));
+    if (queue.length === 1 && !draining) {
+        cachedSetTimeout(drainQueue, 0);
+    }
+};
+
+// v8 likes predictible objects
+function Item(fun, array) {
+    this.fun = fun;
+    this.array = array;
+}
+Item.prototype.run = function () {
+    this.fun.apply(null, this.array);
+};
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+process.versions = {};
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+};
+
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+process.umask = function() { return 0; };
 
 },{}]},{},[1]);

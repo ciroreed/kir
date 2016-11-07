@@ -1,8 +1,10 @@
 var kaop = require("kaop");
-var EJS = require("ejs");
+var ejs = require("ejs");
+var TagPool = require("./src/common/TagPool");
+
 ejs.delimiter = '?';
 kaop.annotations.locals.ResourceAdapter = require("./src/common/ResourceAdapter");
-kaop.annotations.locals.EJS = EJS;
+kaop.annotations.locals.ejs = ejs;
 require("./src/common/customAnnotations").forEach(kaop.annotations.add, annotations);
 
 var types = {
@@ -13,8 +15,9 @@ var types = {
   Class: kaop.Class
 };
 
-if (window) {
+if (typeof window === "object") {
   window.k2 = types;
+  TagPool.add("k-include", require("./src/tag/k-include"));
 } else {
   module.exports = types;
 }
