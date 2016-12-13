@@ -1611,10 +1611,15 @@ var customAnnotations = [
       next();
     });
   },
+  function $timeOut(milisec) {
+    this.after(function(opts, next) {
+      setTimeout(next, milisec);
+    });
+  },
   function $GET(key, cached) {
     this.before(function(opts, next) {
       var cbk = function(raw) {
-        opts.args.unshift(raw);
+        opts.args.push(raw);
         next();
       };
       if (cached) {
@@ -1624,19 +1629,14 @@ var customAnnotations = [
       }
     });
   },
-  function $timeOut(milisec) {
-    this.after(function(opts, next) {
-      setTimeout(next, milisec);
-    });
-  },
-  function $compileTpl(index) {
+  function $compileTpl(key) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = ejs.compile(opts.args[index], {
+        opts.scope.compileFn = ejs.compile(opts.scope[key], {
           context: opts.scope
         });
       }
-      opts.args[index] = opts.scope.compileFn();
+      opts.args.unshift(opts.scope.compileFn());
       next();
     });
   }
@@ -1660,6 +1660,9 @@ var KBase = Class.inherits(HTMLElement, {
     if (rawHtml) {
       this._shadow.innerHTML += rawHtml;
     }
+  },
+  html: function(rawHtml){
+    this._shadow.innerHTML = rawHtml;
   },
   attr: function(k, value) {
     if (!value) {
@@ -1707,8 +1710,8 @@ var KInclude = Class.inherits(KBase, {
     this.path = this.attr("path");
     this.loadTemplate();
   },
-  loadTemplate: ["$GET: 'path', true", function(templateStr) {
-    this.append(templateStr);
+  loadTemplate: ["$GET: 'path', true", function(raw) {
+    this.append(raw);
   }]
 });
 
@@ -1730,9 +1733,14 @@ var KView = Class.inherits(KInclude, {
       delete this.ctrlClass.init;
     }
   },
-  loadTemplate: ["$GET: 'path', true", "$compileTpl: 0", function(templateStr) {
-    this.append(templateStr);
+  loadTemplate: ["$GET: 'path', true", function(raw) {
+    this.raw = raw;
+    this.invalidate(true);
+  }],
+  invalidate: ["$compileTpl: 'raw'", function(compiled, fromAttached){
+    this.html(compiled);
     Utils.forNi(this.ctrlClass, this.on, this);
+    if(!fromAttached){ return; }
     if("initHook" in this){ this.initHook(); }
   }]
 });

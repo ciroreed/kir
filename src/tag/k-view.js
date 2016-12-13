@@ -13,9 +13,14 @@ var KView = Class.inherits(KInclude, {
       delete this.ctrlClass.init;
     }
   },
-  loadTemplate: ["$GET: 'path', true", "$compileTpl: 0", function(templateStr) {
-    this.append(templateStr);
+  loadTemplate: ["$GET: 'path', true", function(raw) {
+    this.raw = raw;
+    this.invalidate(true);
+  }],
+  invalidate: ["$compileTpl: 'raw'", function(compiled, fromAttached){
+    this.html(compiled);
     Utils.forNi(this.ctrlClass, this.on, this);
+    if(!fromAttached){ return; }
     if("initHook" in this){ this.initHook(); }
   }]
 });

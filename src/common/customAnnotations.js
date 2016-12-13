@@ -18,10 +18,15 @@ var customAnnotations = [
       next();
     });
   },
+  function $timeOut(milisec) {
+    this.after(function(opts, next) {
+      setTimeout(next, milisec);
+    });
+  },
   function $GET(key, cached) {
     this.before(function(opts, next) {
       var cbk = function(raw) {
-        opts.args.unshift(raw);
+        opts.args.push(raw);
         next();
       };
       if (cached) {
@@ -31,19 +36,14 @@ var customAnnotations = [
       }
     });
   },
-  function $timeOut(milisec) {
-    this.after(function(opts, next) {
-      setTimeout(next, milisec);
-    });
-  },
-  function $compileTpl(index) {
+  function $compileTpl(key) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = ejs.compile(opts.args[index], {
+        opts.scope.compileFn = ejs.compile(opts.scope[key], {
           context: opts.scope
         });
       }
-      opts.args[index] = opts.scope.compileFn();
+      opts.args.unshift(opts.scope.compileFn());
       next();
     });
   }

@@ -7,8 +7,8 @@ var KInclude = Class.inherits(KBase, {
     this.path = this.attr("path");
     this.loadTemplate();
   },
-  loadTemplate: ["$GET: 'path', true", function(templateStr) {
-    this.append(templateStr);
+  loadTemplate: ["$GET: 'path', true", function(raw) {
+    this.append(raw);
   }]
 });
 

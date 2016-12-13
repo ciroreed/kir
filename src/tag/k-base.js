@@ -14,6 +14,9 @@ var KBase = Class.inherits(HTMLElement, {
       this._shadow.innerHTML += rawHtml;
     }
   },
+  html: function(rawHtml){
+    this._shadow.innerHTML = rawHtml;
+  },
   attr: function(k, value) {
     if (!value) {
       return this.getAttribute(k);
