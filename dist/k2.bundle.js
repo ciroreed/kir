@@ -1,29 +1,30 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var kaop = require("kaop");
-var ejs = require("ejs");
 var TagPool = require("./src/common/TagPool");
-
-ejs.delimiter = '?';
-kaop.annotations.locals.ResourceAdapter = require("./src/common/ResourceAdapter");
-kaop.annotations.locals.ejs = ejs;
 require("./src/common/customAnnotations").forEach(kaop.annotations.add, annotations);
 
-var types = {
-  Component: require("./src/Component"),
-  View: require("./src/View"),
-  Model: require("./src/Model"),
-  Collection: require("./src/Collection"),
-  Class: kaop.Class
+var k2 = {
+  types: {
+    Model: require("./src/Model"),
+    Collection: require("./src/Collection")
+  },
+  tags: {
+    Kinclude: require("./src/tag/k-include"),
+    Kview: require("./src/tag/k-view")
+  }
 };
 
 if (typeof window === "object") {
-  window.k2 = types;
-  TagPool.add("k-include", require("./src/tag/k-include"));
+  window.k2 = k2;
+  window.Class = kaop.Class;
+
+  TagPool.add("k-include", k2.tags.Kinclude);
+  TagPool.add("k-view", k2.tags.Kview);
 } else {
   module.exports = types;
 }
 
-},{"./src/Collection":8,"./src/Component":9,"./src/Model":10,"./src/View":11,"./src/common/ResourceAdapter":14,"./src/common/TagPool":15,"./src/common/customAnnotations":17,"./src/tag/k-include":19,"ejs":2,"kaop":5}],2:[function(require,module,exports){
+},{"./src/Collection":8,"./src/Model":9,"./src/common/TagPool":13,"./src/common/customAnnotations":15,"./src/tag/k-include":17,"./src/tag/k-view":18,"kaop":5}],2:[function(require,module,exports){
 /*
  * EJS Embedded JavaScript templates
  * Copyright 2112 Matthew Eernisse (mde@fleegix.org)
@@ -78,11 +79,10 @@ var scopeOptionWarned = false;
 var _VERSION_STRING = require('../package.json').version;
 var _DEFAULT_DELIMITER = '%';
 var _DEFAULT_LOCALS_NAME = 'locals';
+var _NAME = 'ejs';
 var _REGEX_STRING = '(<%%|%%>|<%=|<%-|<%_|<%#|<%|%>|-%>|_%>)';
-var _OPTS = [ 'cache', 'filename', 'delimiter', 'scope', 'context',
-        'debug', 'compileDebug', 'client', '_with', 'root', 'rmWhitespace',
-        'strict', 'localsName'];
-var _TRAILING_SEMCOL = /;\s*$/;
+var _OPTS = ['delimiter', 'scope', 'context', 'debug', 'compileDebug',
+  'client', '_with', 'rmWhitespace', 'strict', 'filename'];
 var _BOM = /^\uFEFF/;
 
 /**
@@ -98,7 +98,7 @@ exports.cache = utils.cache;
 /**
  * Name of the object containing the locals.
  *
- * This variable is overriden by {@link Options}`.localsName` if it is not
+ * This variable is overridden by {@link Options}`.localsName` if it is not
  * `undefined`.
  *
  * @type {String}
@@ -130,7 +130,7 @@ exports.resolveInclude = function(name, filename, isDir) {
 
 /**
  * Get the path to the included file by Options
- * 
+ *
  * @param  {String}  path    specified path
  * @param  {Options} options compilation options
  * @return {String}
@@ -144,7 +144,7 @@ function getIncludePath(path, options){
     if (!options.filename) {
       throw new Error('`include` use relative path requires the \'filename\' option.');
     }
-    includePath = exports.resolveInclude(path, options.filename);  
+    includePath = exports.resolveInclude(path, options.filename);
   }
   return includePath;
 }
@@ -257,10 +257,11 @@ function includeSource(path, options) {
  * @static
  */
 
-function rethrow(err, str, filename, lineno){
+function rethrow(err, str, flnm, lineno){
   var lines = str.split('\n');
   var start = Math.max(lineno - 3, 0);
   var end = Math.min(lines.length, lineno + 3);
+  var filename = utils.escapeXML(flnm);
   // Error context
   var context = lines.slice(start, end).map(function (line, i){
     var curr = i + start + 1;
@@ -280,24 +281,8 @@ function rethrow(err, str, filename, lineno){
   throw err;
 }
 
-/**
- * Copy properties in data object that are recognized as options to an
- * options object.
- *
- * This is used for compatibility with earlier versions of EJS and Express.js.
- *
- * @memberof module:ejs-internal
- * @param {Object}  data data object
- * @param {Options} opts options object
- * @static
- */
-
-function cpOptsInData(data, opts) {
-  _OPTS.forEach(function (p) {
-    if (typeof data[p] != 'undefined') {
-      opts[p] = data[p];
-    }
-  });
+function stripSemi(str) {
+  return str.replace(/;(\s*$)/, '$1');
 }
 
 /**
@@ -352,7 +337,7 @@ exports.render = function (template, d, o) {
   // No options object -- if there are optiony names
   // in the data, copy them to options
   if (arguments.length == 2) {
-    cpOptsInData(data, opts);
+    utils.shallowCopyFromList(opts, data, _OPTS);
   }
 
   return handleCache(opts, template)(data);
@@ -377,21 +362,27 @@ exports.renderFile = function () {
   var cb = args.pop();
   var data = args.shift() || {};
   var opts = args.pop() || {};
+  var optsKeys =_OPTS.slice();
   var result;
 
   // Don't pollute passed in opts obj with new vals
   opts = utils.shallowCopy({}, opts);
+
+  // We don't allow 'cache' option to be passed in the data obj
+  // for the normal `render` call, but this is where Expres puts it
+  // so we make an exception for `renderFile`
+  optsKeys.push('cache');
 
   // No options object -- if there are optiony names
   // in the data, copy them to options
   if (arguments.length == 3) {
     // Express 4
     if (data.settings && data.settings['view options']) {
-      cpOptsInData(data.settings['view options'], opts);
+      utils.shallowCopyFromList(opts, data.settings['view options'], optsKeys);
     }
     // Express 3 and lower
     else {
-      cpOptsInData(data, opts);
+      utils.shallowCopyFromList(opts, data, optsKeys);
     }
   }
   opts.filename = filename;
@@ -522,7 +513,9 @@ Template.prototype = {
         if (opts.filename) {
           e.message += ' in ' + opts.filename;
         }
-        e.message += ' while compiling ejs';
+        e.message += ' while compiling ejs\n\n';
+        e.message += 'If the above error is not helpful, you may want to try EJS-Lint:\n';
+        e.message += 'https://github.com/RyanZim/EJS-Lint';
       }
       throw e;
     }
@@ -664,9 +657,8 @@ Template.prototype = {
         self.truncate = false;
       }
       else if (self.opts.rmWhitespace) {
-        // Gotta be more careful here.
-        // .replace(/^(\s*)\n/, '$1') might be more appropriate here but as
-        // rmWhitespace already removes trailing spaces anyway so meh.
+        // rmWhitespace has already removed trailing spaces, just need
+        // to remove linebreaks
         line = line.replace(/^\n/, '');
       }
       if (!line) {
@@ -689,77 +681,75 @@ Template.prototype = {
     newLineCount = (line.split('\n').length - 1);
 
     switch (line) {
-      case '<' + d:
-      case '<' + d + '_':
-        this.mode = Template.modes.EVAL;
-        break;
-      case '<' + d + '=':
-        this.mode = Template.modes.ESCAPED;
-        break;
-      case '<' + d + '-':
-        this.mode = Template.modes.RAW;
-        break;
-      case '<' + d + '#':
-        this.mode = Template.modes.COMMENT;
-        break;
-      case '<' + d + d:
-        this.mode = Template.modes.LITERAL;
-        this.source += '    ; __append("' + line.replace('<' + d + d, '<' + d) + '")' + '\n';
-        break;
-      case d + d + '>':
-        this.mode = Template.modes.LITERAL;
-        this.source += '    ; __append("' + line.replace(d + d + '>', d + '>') + '")' + '\n';
-        break;
-      case d + '>':
-      case '-' + d + '>':
-      case '_' + d + '>':
-        if (this.mode == Template.modes.LITERAL) {
-          _addOutput();
-        }
+    case '<' + d:
+    case '<' + d + '_':
+      this.mode = Template.modes.EVAL;
+      break;
+    case '<' + d + '=':
+      this.mode = Template.modes.ESCAPED;
+      break;
+    case '<' + d + '-':
+      this.mode = Template.modes.RAW;
+      break;
+    case '<' + d + '#':
+      this.mode = Template.modes.COMMENT;
+      break;
+    case '<' + d + d:
+      this.mode = Template.modes.LITERAL;
+      this.source += '    ; __append("' + line.replace('<' + d + d, '<' + d) + '")' + '\n';
+      break;
+    case d + d + '>':
+      this.mode = Template.modes.LITERAL;
+      this.source += '    ; __append("' + line.replace(d + d + '>', d + '>') + '")' + '\n';
+      break;
+    case d + '>':
+    case '-' + d + '>':
+    case '_' + d + '>':
+      if (this.mode == Template.modes.LITERAL) {
+        _addOutput();
+      }
 
-        this.mode = null;
-        this.truncate = line.indexOf('-') === 0 || line.indexOf('_') === 0;
-        break;
-      default:
+      this.mode = null;
+      this.truncate = line.indexOf('-') === 0 || line.indexOf('_') === 0;
+      break;
+    default:
         // In script mode, depends on type of tag
-        if (this.mode) {
+      if (this.mode) {
           // If '//' is found without a line break, add a line break.
-          switch (this.mode) {
-            case Template.modes.EVAL:
-            case Template.modes.ESCAPED:
-            case Template.modes.RAW:
-              if (line.lastIndexOf('//') > line.lastIndexOf('\n')) {
-                line += '\n';
-              }
+        switch (this.mode) {
+        case Template.modes.EVAL:
+        case Template.modes.ESCAPED:
+        case Template.modes.RAW:
+          if (line.lastIndexOf('//') > line.lastIndexOf('\n')) {
+            line += '\n';
           }
-          switch (this.mode) {
+        }
+        switch (this.mode) {
             // Just executing code
-            case Template.modes.EVAL:
-              this.source += '    ; ' + line + '\n';
-              break;
+        case Template.modes.EVAL:
+          this.source += '    ; ' + line + '\n';
+          break;
             // Exec, esc, and output
-            case Template.modes.ESCAPED:
-              this.source += '    ; __append(escape(' +
-                line.replace(_TRAILING_SEMCOL, '').trim() + '))' + '\n';
-              break;
+        case Template.modes.ESCAPED:
+          this.source += '    ; __append(escape(' + stripSemi(line) + '))' + '\n';
+          break;
             // Exec and output
-            case Template.modes.RAW:
-              this.source += '    ; __append(' +
-                line.replace(_TRAILING_SEMCOL, '').trim() + ')' + '\n';
-              break;
-            case Template.modes.COMMENT:
+        case Template.modes.RAW:
+          this.source += '    ; __append(' + stripSemi(line) + ')' + '\n';
+          break;
+        case Template.modes.COMMENT:
               // Do nothing
-              break;
+          break;
             // Literal <%% mode, append as raw output
-            case Template.modes.LITERAL:
-              _addOutput();
-              break;
-          }
-        }
-        // In string mode, just add the output
-        else {
+        case Template.modes.LITERAL:
           _addOutput();
+          break;
         }
+      }
+        // In string mode, just add the output
+      else {
+        _addOutput();
+      }
     }
 
     if (self.opts.compileDebug && newLineCount) {
@@ -800,9 +790,9 @@ if (require.extensions) {
   require.extensions['.ejs'] = function (module, flnm) {
     var filename = flnm || /* istanbul ignore next */ module.filename;
     var options = {
-          filename: filename,
-          client: true
-        };
+      filename: filename,
+      client: true
+    };
     var template = fs.readFileSync(filename).toString();
     var fn = exports.compile(template, options);
     module._compile('module.exports = ' + fn.toString() + ';', filename);
@@ -819,12 +809,22 @@ if (require.extensions) {
 
 exports.VERSION = _VERSION_STRING;
 
+/**
+ * Name for detection of EJS.
+ *
+ * @readonly
+ * @type {String}
+ * @public
+ */
+
+exports.name = _NAME;
+
 /* istanbul ignore if */
 if (typeof window != 'undefined') {
   window.ejs = exports;
 }
 
-},{"../package.json":4,"./utils":3,"fs":20,"path":21}],3:[function(require,module,exports){
+},{"../package.json":4,"./utils":3,"fs":19,"path":20}],3:[function(require,module,exports){
 /*
  * EJS Embedded JavaScript templates
  * Copyright 2112 Matthew Eernisse (mde@fleegix.org)
@@ -872,17 +872,17 @@ exports.escapeRegExpChars = function (string) {
 };
 
 var _ENCODE_HTML_RULES = {
-      '&': '&amp;'
-    , '<': '&lt;'
-    , '>': '&gt;'
-    , '"': '&#34;'
-    , "'": '&#39;'
-    }
-  , _MATCH_HTML = /[&<>\'"]/g;
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&#34;',
+  "'": '&#39;'
+};
+var _MATCH_HTML = /[&<>\'"]/g;
 
 function encode_char(c) {
   return _ENCODE_HTML_RULES[c] || c;
-};
+}
 
 /**
  * Stringified version of constants used by {@link module:utils.escapeXML}.
@@ -925,11 +925,13 @@ exports.escapeXML = function (markup) {
         .replace(_MATCH_HTML, encode_char);
 };
 exports.escapeXML.toString = function () {
-  return Function.prototype.toString.call(this) + ';\n' + escapeFuncStr
+  return Function.prototype.toString.call(this) + ';\n' + escapeFuncStr;
 };
 
 /**
- * Copy all properties from one object to another, in a shallow fashion.
+ * Naive copy of properties from one object to another.
+ * Does not recurse into non-scalar properties
+ * Does not check to see if the property has a value before copying
  *
  * @param  {Object} to   Destination object
  * @param  {Object} from Source object
@@ -942,6 +944,27 @@ exports.shallowCopy = function (to, from) {
   for (var p in from) {
     to[p] = from[p];
   }
+  return to;
+};
+
+/**
+ * Naive copy of a list of key names, from one object to another.
+ * Only copies property if it is actually defined
+ * Does not recurse into non-scalar properties
+ *
+ * @param  {Object} to   Destination object
+ * @param  {Object} from Source object
+ * @param  {Array} list List of properties to copy
+ * @return {Object}      Destination object
+ * @static
+ * @private
+ */
+exports.shallowCopyFromList = function (to, from, list) {
+  list.forEach(function (p) {
+    if (typeof from[p] != 'undefined') {
+      to[p] = from[p];
+    }
+  });
   return to;
 };
 
@@ -966,21 +989,61 @@ exports.cache = {
   }
 };
 
-
 },{}],4:[function(require,module,exports){
 module.exports={
-  "name": "ejs",
-  "description": "Embedded JavaScript templates",
-  "keywords": [
-    "template",
-    "engine",
-    "ejs"
+  "_args": [
+    [
+      {
+        "raw": "ejs@^2.5.2",
+        "scope": null,
+        "escapedName": "ejs",
+        "name": "ejs",
+        "rawSpec": "^2.5.2",
+        "spec": ">=2.5.2 <3.0.0",
+        "type": "range"
+      },
+      "/home/ivan/Projects/kir"
+    ]
   ],
-  "version": "2.5.2",
+  "_from": "ejs@>=2.5.2 <3.0.0",
+  "_id": "ejs@2.5.5",
+  "_inCache": true,
+  "_location": "/ejs",
+  "_nodeVersion": "6.9.1",
+  "_npmOperationalInternal": {
+    "host": "packages-18-east.internal.npmjs.com",
+    "tmp": "tmp/ejs-2.5.5.tgz_1481011535826_0.4493071837350726"
+  },
+  "_npmUser": {
+    "name": "mde",
+    "email": "mde@fleegix.org"
+  },
+  "_npmVersion": "3.10.8",
+  "_phantomChildren": {},
+  "_requested": {
+    "raw": "ejs@^2.5.2",
+    "scope": null,
+    "escapedName": "ejs",
+    "name": "ejs",
+    "rawSpec": "^2.5.2",
+    "spec": ">=2.5.2 <3.0.0",
+    "type": "range"
+  },
+  "_requiredBy": [
+    "/"
+  ],
+  "_resolved": "https://registry.npmjs.org/ejs/-/ejs-2.5.5.tgz",
+  "_shasum": "6ef4e954ea7dcf54f66aad2fe7aa421932d9ed77",
+  "_shrinkwrap": null,
+  "_spec": "ejs@^2.5.2",
+  "_where": "/home/ivan/Projects/kir",
   "author": {
     "name": "Matthew Eernisse",
     "email": "mde@fleegix.org",
     "url": "http://fleegix.org"
+  },
+  "bugs": {
+    "url": "https://github.com/mde/ejs/issues"
   },
   "contributors": [
     {
@@ -989,67 +1052,56 @@ module.exports={
       "url": "https://timothygu.github.io"
     }
   ],
-  "license": "Apache-2.0",
-  "main": "./lib/ejs.js",
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/mde/ejs.git"
-  },
-  "bugs": {
-    "url": "https://github.com/mde/ejs/issues"
-  },
-  "homepage": "https://github.com/mde/ejs",
   "dependencies": {},
+  "description": "Embedded JavaScript templates",
   "devDependencies": {
     "browserify": "^13.0.1",
     "eslint": "^3.0.0",
+    "git-directory-deploy": "^1.5.1",
     "istanbul": "~0.4.3",
     "jake": "^8.0.0",
     "jsdoc": "^3.4.0",
     "lru-cache": "^4.0.1",
     "mocha": "^3.0.2",
-    "rimraf": "^2.2.8",
     "uglify-js": "^2.6.2"
+  },
+  "directories": {},
+  "dist": {
+    "shasum": "6ef4e954ea7dcf54f66aad2fe7aa421932d9ed77",
+    "tarball": "https://registry.npmjs.org/ejs/-/ejs-2.5.5.tgz"
   },
   "engines": {
     "node": ">=0.10.0"
   },
-  "scripts": {
-    "test": "mocha",
-    "coverage": "istanbul cover node_modules/mocha/bin/_mocha",
-    "doc": "rimraf out && jsdoc -c jsdoc.json lib/* docs/jsdoc/*",
-    "devdoc": "rimraf out && jsdoc -p -c jsdoc.json lib/* docs/jsdoc/*"
-  },
-  "_id": "ejs@2.5.2",
-  "_shasum": "21444ba09386f0c65b6eafb96a3d51bcb3be80d1",
-  "_resolved": "https://registry.npmjs.org/ejs/-/ejs-2.5.2.tgz",
-  "_from": "ejs@latest",
-  "_npmVersion": "2.14.7",
-  "_nodeVersion": "4.2.2",
-  "_npmUser": {
-    "name": "mde",
-    "email": "mde@fleegix.org"
-  },
-  "dist": {
-    "shasum": "21444ba09386f0c65b6eafb96a3d51bcb3be80d1",
-    "tarball": "https://registry.npmjs.org/ejs/-/ejs-2.5.2.tgz"
-  },
+  "homepage": "https://github.com/mde/ejs",
+  "keywords": [
+    "template",
+    "engine",
+    "ejs"
+  ],
+  "license": "Apache-2.0",
+  "main": "./lib/ejs.js",
   "maintainers": [
-    {
-      "name": "tjholowaychuk",
-      "email": "tj@vision-media.ca"
-    },
     {
       "name": "mde",
       "email": "mde@fleegix.org"
     }
   ],
-  "_npmOperationalInternal": {
-    "host": "packages-12-west.internal.npmjs.com",
-    "tmp": "tmp/ejs-2.5.2.tgz_1473259584869_0.9678213631268591"
+  "name": "ejs",
+  "optionalDependencies": {},
+  "readme": "ERROR: No README data found!",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mde/ejs.git"
   },
-  "directories": {},
-  "readme": "ERROR: No README data found!"
+  "scripts": {
+    "coverage": "istanbul cover node_modules/mocha/bin/_mocha",
+    "devdoc": "jake doc[dev]",
+    "doc": "jake doc",
+    "lint": "eslint \"**/*.js\" Jakefile",
+    "test": "mocha"
+  },
+  "version": "2.5.5"
 }
 
 },{}],5:[function(require,module,exports){
@@ -1305,43 +1357,7 @@ var Collection = Class.inherits(EventEmitter, {
 
 module.exports = Collection;
 
-},{"./Model":10,"./common/EventEmitter":12,"kaop":5}],9:[function(require,module,exports){
-var Utils = require("./common/Utils");
-var Class = require("kaop").Class;
-var View = require("./View");
-
-var Component = Class.inherits(View, {
-  model: null,
-  collection: null,
-  events: null,
-  invalidate: ["$override", function(parent) {
-    parent();
-    Utils.forNi(this.events || {}, this.on, this);
-  }],
-  on: function(evt, handler) {
-    var eventSplit = evt.split(" ");
-    var targets = this.q(eventSplit[1], true);
-    for (var i = 0; i < targets.length; i++) {
-      targets[i].addEventListener(eventSplit[0], handler.bind(this));
-    }
-  },
-  off: function(evt, handler) {
-    var eventSplit = idEvent.split(" ");
-    this.q(eventSplit[1]).removeEventListener(eventSplit[0], handler);
-  },
-  root: ["$override", function(parent) {
-    if (this.template) {
-      setTimeout(this.invalidate);
-    } else {
-      this.getTemplate();
-    }
-    return parent();
-  }]
-});
-
-module.exports = Component;
-
-},{"./View":11,"./common/Utils":16,"kaop":5}],10:[function(require,module,exports){
+},{"./Model":9,"./common/EventEmitter":10,"kaop":5}],9:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
 var Class = require("kaop").Class;
 
@@ -1371,55 +1387,7 @@ var Model = Class.inherits(EventEmitter, {
 
 module.exports = Model;
 
-},{"./common/EventEmitter":12,"kaop":5}],11:[function(require,module,exports){
-var Utils = require("./common/Utils");
-var Class = require("kaop").Class;
-
-var View = Class({
-  path: null,
-  anchor: null,
-  elid: null,
-  html: "",
-  template: "",
-  constructor: function(path, anchor) {
-    this.path = path;
-    this.anchor = anchor;
-    this.root();
-    this.getTemplate();
-  },
-  root: function() {
-    var tmpNode = document.createElement("k2-view");
-    this.uid = Utils.unique();
-    tmpNode.setAttribute("id", this.uid);
-    tmpNode.setAttribute("class", this.path || "");
-    var htmlRoot = tmpNode.outerHTML;
-    this.html = htmlRoot;
-    if (this.anchor) {
-      this.q(this.anchor).innerHTML = htmlRoot;
-    }
-    return htmlRoot;
-  },
-  getTemplate: ["$GET: 'path', true", function(templateStr) {
-    this.template = templateStr;
-    this.invalidate();
-  }],
-  invalidate: ["$compileTpl: 'template'", function(template) {
-    if (!this.elid) {
-      this.elid = document.getElementById(this.uid);
-    }
-    this.elid.innerHTML = template;
-  }],
-  q: function(selector, all) {
-    if (all) {
-      return (this.elid || document).querySelectorAll(selector);
-    }
-    return (this.elid || document).querySelector(selector);
-  }
-});
-
-module.exports = View;
-
-},{"./common/Utils":16,"kaop":5}],12:[function(require,module,exports){
+},{"./common/EventEmitter":10,"kaop":5}],10:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var EventEmitter = Class({
@@ -1455,7 +1423,7 @@ var EventEmitter = Class({
 
 module.exports = EventEmitter;
 
-},{"kaop":5}],13:[function(require,module,exports){
+},{"kaop":5}],11:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var HttpRequest = Class({
@@ -1505,7 +1473,7 @@ var HttpRequest = Class({
 
 module.exports = HttpRequest;
 
-},{"kaop":5}],14:[function(require,module,exports){
+},{"kaop":5}],12:[function(require,module,exports){
 var Class = require("kaop").Class;
 var HttpRequest = require("./HttpRequest");
 
@@ -1558,7 +1526,7 @@ var ResourceAdapter = Class.static({
 
 module.exports = ResourceAdapter;
 
-},{"./HttpRequest":13,"kaop":5}],15:[function(require,module,exports){
+},{"./HttpRequest":11,"kaop":5}],13:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var TagPool = Class.static({
@@ -1571,7 +1539,7 @@ var TagPool = Class.static({
 
 module.exports = TagPool;
 
-},{"kaop":5}],16:[function(require,module,exports){
+},{"kaop":5}],14:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var Utils = Class.static({
@@ -1622,8 +1590,14 @@ var Utils = Class.static({
 
 module.exports = Utils;
 
-},{"kaop":5}],17:[function(require,module,exports){
-module.exports = [
+},{"kaop":5}],15:[function(require,module,exports){
+var annotations = require("kaop").annotations;
+
+annotations.locals.ResourceAdapter = require("./ResourceAdapter");
+annotations.locals.ejs = require("ejs");
+annotations.locals.ejs.delimiter = "?";
+
+var customAnnotations = [
   function $jsonParse(index) {
     this.before(function(opts, next) {
       var parsedArgument = JSON.parse(opts.args[index]);
@@ -1655,20 +1629,22 @@ module.exports = [
       setTimeout(next, milisec);
     });
   },
-  function $compileTpl(key) {
+  function $compileTpl(index) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = ejs.compile(opts.scope[key], {
+        opts.scope.compileFn = ejs.compile(opts.args[index], {
           context: opts.scope
         });
       }
-      opts.args[0] = opts.scope.compileFn();
+      opts.args[index] = opts.scope.compileFn();
       next();
     });
   }
 ];
 
-},{}],18:[function(require,module,exports){
+module.exports = customAnnotations;
+
+},{"./ResourceAdapter":12,"ejs":2,"kaop":5}],16:[function(require,module,exports){
 var Class = require("kaop").Class;
 
 var KBase = Class.inherits(HTMLElement, {
@@ -1708,8 +1684,11 @@ var KBase = Class.inherits(HTMLElement, {
     evt.target = this;
     this.dispatchEvent(evt);
   },
-  q: function(selector) {
-    return this._shadow.querySelector(selector);
+  q: function(selector, all) {
+    if(!all){
+      return this._shadow.querySelector(selector);
+    }
+    return this._shadow.querySelectorAll(selector);
   },
   qq: function(selector) {
     return this.querySelector(selector);
@@ -1718,7 +1697,7 @@ var KBase = Class.inherits(HTMLElement, {
 
 module.exports = KBase;
 
-},{"kaop":5}],19:[function(require,module,exports){
+},{"kaop":5}],17:[function(require,module,exports){
 var Class = require("kaop").Class;
 var KBase = require("./k-base");
 
@@ -1735,9 +1714,34 @@ var KInclude = Class.inherits(KBase, {
 
 module.exports = KInclude;
 
-},{"./k-base":18,"kaop":5}],20:[function(require,module,exports){
+},{"./k-base":16,"kaop":5}],18:[function(require,module,exports){
+var Class = require("kaop").Class;
+var Utils = require("../common/Utils");
+var KInclude = require("./k-include");
 
-},{}],21:[function(require,module,exports){
+var KView = Class.inherits(KInclude, {
+  attachedCallback: ["$override", function(parent) {
+    parent();
+  }],
+  declare: function(controllerDeclaration){
+    this.ctrlClass = Class.static(controllerDeclaration);
+    if("init" in this.ctrlClass){
+      this.initHook = this.ctrlClass.init;
+      delete this.ctrlClass.init;
+    }
+  },
+  loadTemplate: ["$GET: 'path', true", "$compileTpl: 0", function(templateStr) {
+    this.append(templateStr);
+    Utils.forNi(this.ctrlClass, this.on, this);
+    if("initHook" in this){ this.initHook(); }
+  }]
+});
+
+module.exports = KView;
+
+},{"../common/Utils":14,"./k-include":17,"kaop":5}],19:[function(require,module,exports){
+
+},{}],20:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -1965,15 +1969,96 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":22}],22:[function(require,module,exports){
+},{"_process":21}],21:[function(require,module,exports){
 // shim for using process in browser
-
 var process = module.exports = {};
 
-// cached from whatever global is present so that test runners that stub it don't break things.
-var cachedSetTimeout = setTimeout;
-var cachedClearTimeout = clearTimeout;
+// cached from whatever global is present so that test runners that stub it
+// don't break things.  But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// function because try/catches deoptimize in certain engines.
 
+var cachedSetTimeout;
+var cachedClearTimeout;
+
+function defaultSetTimout() {
+    throw new Error('setTimeout has not been defined');
+}
+function defaultClearTimeout () {
+    throw new Error('clearTimeout has not been defined');
+}
+(function () {
+    try {
+        if (typeof setTimeout === 'function') {
+            cachedSetTimeout = setTimeout;
+        } else {
+            cachedSetTimeout = defaultSetTimout;
+        }
+    } catch (e) {
+        cachedSetTimeout = defaultSetTimout;
+    }
+    try {
+        if (typeof clearTimeout === 'function') {
+            cachedClearTimeout = clearTimeout;
+        } else {
+            cachedClearTimeout = defaultClearTimeout;
+        }
+    } catch (e) {
+        cachedClearTimeout = defaultClearTimeout;
+    }
+} ())
+function runTimeout(fun) {
+    if (cachedSetTimeout === setTimeout) {
+        //normal enviroments in sane situations
+        return setTimeout(fun, 0);
+    }
+    // if setTimeout wasn't available but was latter defined
+    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+        cachedSetTimeout = setTimeout;
+        return setTimeout(fun, 0);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedSetTimeout(fun, 0);
+    } catch(e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+            return cachedSetTimeout.call(null, fun, 0);
+        } catch(e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+            return cachedSetTimeout.call(this, fun, 0);
+        }
+    }
+
+
+}
+function runClearTimeout(marker) {
+    if (cachedClearTimeout === clearTimeout) {
+        //normal enviroments in sane situations
+        return clearTimeout(marker);
+    }
+    // if clearTimeout wasn't available but was latter defined
+    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+        cachedClearTimeout = clearTimeout;
+        return clearTimeout(marker);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedClearTimeout(marker);
+    } catch (e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+            return cachedClearTimeout.call(null, marker);
+        } catch (e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+            return cachedClearTimeout.call(this, marker);
+        }
+    }
+
+
+
+}
 var queue = [];
 var draining = false;
 var currentQueue;
@@ -1998,7 +2083,7 @@ function drainQueue() {
     if (draining) {
         return;
     }
-    var timeout = cachedSetTimeout(cleanUpNextTick);
+    var timeout = runTimeout(cleanUpNextTick);
     draining = true;
 
     var len = queue.length;
@@ -2015,7 +2100,7 @@ function drainQueue() {
     }
     currentQueue = null;
     draining = false;
-    cachedClearTimeout(timeout);
+    runClearTimeout(timeout);
 }
 
 process.nextTick = function (fun) {
@@ -2027,7 +2112,7 @@ process.nextTick = function (fun) {
     }
     queue.push(new Item(fun, args));
     if (queue.length === 1 && !draining) {
-        cachedSetTimeout(drainQueue, 0);
+        runTimeout(drainQueue);
     }
 };
 

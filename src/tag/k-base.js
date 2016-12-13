@@ -37,8 +37,11 @@ var KBase = Class.inherits(HTMLElement, {
     evt.target = this;
     this.dispatchEvent(evt);
   },
-  q: function(selector) {
-    return this._shadow.querySelector(selector);
+  q: function(selector, all) {
+    if(!all){
+      return this._shadow.querySelector(selector);
+    }
+    return this._shadow.querySelectorAll(selector);
   },
   qq: function(selector) {
     return this.querySelector(selector);

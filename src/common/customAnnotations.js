@@ -1,4 +1,10 @@
-module.exports = [
+var annotations = require("kaop").annotations;
+
+annotations.locals.ResourceAdapter = require("./ResourceAdapter");
+annotations.locals.ejs = require("ejs");
+annotations.locals.ejs.delimiter = "?";
+
+var customAnnotations = [
   function $jsonParse(index) {
     this.before(function(opts, next) {
       var parsedArgument = JSON.parse(opts.args[index]);
@@ -30,15 +36,17 @@ module.exports = [
       setTimeout(next, milisec);
     });
   },
-  function $compileTpl(key) {
+  function $compileTpl(index) {
     this.before(function(opts, next) {
       if (!opts.scope.compileFn) {
-        opts.scope.compileFn = ejs.compile(opts.scope[key], {
+        opts.scope.compileFn = ejs.compile(opts.args[index], {
           context: opts.scope
         });
       }
-      opts.args[0] = opts.scope.compileFn();
+      opts.args[index] = opts.scope.compileFn();
       next();
     });
   }
 ];
+
+module.exports = customAnnotations;
