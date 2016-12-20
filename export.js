@@ -1,6 +1,7 @@
 var kaop = require("kaop");
-var TagPool = require("./src/common/TagPool");
-require("./src/common/customAnnotations").forEach(kaop.annotations.add, annotations);
+
+require("./src/common/customAnnotations")
+.forEach(kaop.annotations.add, kaop.annotations);
 
 var k2 = {
   types: {
@@ -9,16 +10,18 @@ var k2 = {
   },
   tags: {
     Kinclude: require("./src/tag/k-include"),
-    Kview: require("./src/tag/k-view")
-  }
+    Kview: require("./src/tag/k-view"),
+    Kbase: require("./src/tag/k-base")
+  },
+  TagPool: require("./src/common/TagPool"),
+  Class: kaop.Class,
+  Annotations: kaop.annotations
 };
 
 if (typeof window === "object") {
+  k2.TagPool.add("k-include", k2.tags.Kinclude);
+  k2.TagPool.add("k-view", k2.tags.Kview);
   window.k2 = k2;
-  window.Class = kaop.Class;
-
-  TagPool.add("k-include", k2.tags.Kinclude);
-  TagPool.add("k-view", k2.tags.Kview);
 } else {
-  module.exports = types;
+  module.exports = k2;
 }

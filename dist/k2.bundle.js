@@ -1,7 +1,8 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var kaop = require("kaop");
-var TagPool = require("./src/common/TagPool");
-require("./src/common/customAnnotations").forEach(kaop.annotations.add, annotations);
+
+require("./src/common/customAnnotations")
+.forEach(kaop.annotations.add, kaop.annotations);
 
 var k2 = {
   types: {
@@ -10,21 +11,23 @@ var k2 = {
   },
   tags: {
     Kinclude: require("./src/tag/k-include"),
-    Kview: require("./src/tag/k-view")
-  }
+    Kview: require("./src/tag/k-view"),
+    Kbase: require("./src/tag/k-base")
+  },
+  TagPool: require("./src/common/TagPool"),
+  Class: kaop.Class,
+  Annotations: kaop.annotations
 };
 
 if (typeof window === "object") {
+  k2.TagPool.add("k-include", k2.tags.Kinclude);
+  k2.TagPool.add("k-view", k2.tags.Kview);
   window.k2 = k2;
-  window.Class = kaop.Class;
-
-  TagPool.add("k-include", k2.tags.Kinclude);
-  TagPool.add("k-view", k2.tags.Kview);
 } else {
-  module.exports = types;
+  module.exports = k2;
 }
 
-},{"./src/Collection":8,"./src/Model":9,"./src/common/TagPool":13,"./src/common/customAnnotations":15,"./src/tag/k-include":17,"./src/tag/k-view":18,"kaop":5}],2:[function(require,module,exports){
+},{"./src/Collection":8,"./src/Model":9,"./src/common/TagPool":13,"./src/common/customAnnotations":15,"./src/tag/k-base":16,"./src/tag/k-include":17,"./src/tag/k-view":18,"kaop":5}],2:[function(require,module,exports){
 /*
  * EJS Embedded JavaScript templates
  * Copyright 2112 Matthew Eernisse (mde@fleegix.org)
@@ -1727,11 +1730,11 @@ var KView = Class.inherits(KInclude, {
     parent();
   }],
   declare: function(controllerDeclaration){
-    this.ctrlClass = Class.static(controllerDeclaration);
-    if("init" in this.ctrlClass){
-      this.initHook = this.ctrlClass.init;
-      delete this.ctrlClass.init;
-    }
+    if(this.filled) { return; }
+    Utils.forIn(Class.static(controllerDeclaration), function(prop, key){
+      this[key] = prop;
+    }, this);
+    this.filled = true;
   },
   loadTemplate: ["$GET: 'path', true", function(raw) {
     this.raw = raw;
@@ -1739,9 +1742,9 @@ var KView = Class.inherits(KInclude, {
   }],
   invalidate: ["$compileTpl: 'raw'", function(compiled, fromAttached){
     this.html(compiled);
-    Utils.forNi(this.ctrlClass, this.on, this);
+    Utils.forNi(this, this.on, this);
     if(!fromAttached){ return; }
-    if("initHook" in this){ this.initHook(); }
+    if("constructor" in this){ this.constructor(); }
   }]
 });
 

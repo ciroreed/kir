@@ -7,11 +7,11 @@ var KView = Class.inherits(KInclude, {
     parent();
   }],
   declare: function(controllerDeclaration){
-    this.ctrlClass = Class.static(controllerDeclaration);
-    if("init" in this.ctrlClass){
-      this.initHook = this.ctrlClass.init;
-      delete this.ctrlClass.init;
-    }
+    if(this.filled) { return; }
+    Utils.forIn(Class.static(controllerDeclaration), function(prop, key){
+      this[key] = prop;
+    }, this);
+    this.filled = true;
   },
   loadTemplate: ["$GET: 'path', true", function(raw) {
     this.raw = raw;
@@ -19,9 +19,9 @@ var KView = Class.inherits(KInclude, {
   }],
   invalidate: ["$compileTpl: 'raw'", function(compiled, fromAttached){
     this.html(compiled);
-    Utils.forNi(this.ctrlClass, this.on, this);
+    Utils.forNi(this, this.on, this);
     if(!fromAttached){ return; }
-    if("initHook" in this){ this.initHook(); }
+    if("constructor" in this){ this.constructor(); }
   }]
 });
 

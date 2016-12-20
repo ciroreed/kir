@@ -11,6 +11,6 @@
   "license": "ISC",
   "dependencies": {
     "ejs": "^2.5.2",
-    "kaop": "^2.3.8"
+    "kaop": "^2.4.0"
   }
 }
