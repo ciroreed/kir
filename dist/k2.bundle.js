@@ -2,29 +2,29 @@
 var kaop = require("kaop");
 
 require("./src/common/customAnnotations")
-.forEach(kaop.annotations.add, kaop.annotations);
+    .forEach(kaop.Annotations.add, kaop.Annotations);
 
 var k2 = {
-  types: {
-    Model: require("./src/Model"),
-    Collection: require("./src/Collection")
-  },
-  tags: {
-    Kinclude: require("./src/tag/k-include"),
-    Kview: require("./src/tag/k-view"),
-    Kbase: require("./src/tag/k-base")
-  },
-  TagPool: require("./src/common/TagPool"),
-  Class: kaop.Class,
-  Annotations: kaop.annotations
+    types: {
+        Model: require("./src/Model"),
+        Collection: require("./src/Collection")
+    },
+    tags: {
+        Kinclude: require("./src/tag/k-include"),
+        Kview: require("./src/tag/k-view"),
+        Kbase: require("./src/tag/k-base")
+    },
+    TagPool: require("./src/common/TagPool"),
+    Class: kaop.Class,
+    Annotations: kaop.Annotations
 };
 
 if (typeof window === "object") {
-  k2.TagPool.add("k-include", k2.tags.Kinclude);
-  k2.TagPool.add("k-view", k2.tags.Kview);
-  window.k2 = k2;
+    k2.TagPool.add("k-include", k2.tags.Kinclude);
+    k2.TagPool.add("k-view", k2.tags.Kview);
+    window.k2 = k2;
 } else {
-  module.exports = k2;
+    module.exports = k2;
 }
 
 },{"./src/Collection":8,"./src/Model":9,"./src/common/TagPool":13,"./src/common/customAnnotations":15,"./src/tag/k-base":16,"./src/tag/k-include":17,"./src/tag/k-view":18,"kaop":5}],2:[function(require,module,exports){
@@ -1109,178 +1109,199 @@ module.exports={
 
 },{}],5:[function(require,module,exports){
 var Class = require("./src/Class");
-var annotations = require("./src/annotations");
+var Annotations = require("./src/Annotations");
 
 if (typeof module === "object") {
-  module.exports = {
-    Class: Class,
-    annotations: annotations
-  };
+    module.exports = {
+        Class: Class,
+        Annotations: Annotations
+    };
 } else {
-  window.Class = Class;
-  window.annotations = annotations;
+    window.Class = Class;
+    window.Annotations = Annotations;
 }
 
-},{"./src/Class":6,"./src/annotations":7}],6:[function(require,module,exports){
-var annotations = require("./annotations");
+},{"./src/Annotations":6,"./src/Class":7}],6:[function(require,module,exports){
+var Annotations = {
+    arr: [
+        function $override() {
+            this.before(function(opts, next) {
+                opts.args.unshift(opts.parentScope[opts.methodName].bind(opts.scope));
+                next();
+            });
+        }
+    ],
+    locals: {},
+    add: function(ann) {
+        this.arr.push(ann);
+    },
+    names: function() {
+        return this.arr.map(function(fn) {
+            return fn.name;
+        });
+    },
+    getAnnotation: function(annotationName) {
+        for (var i = 0; i < this.arr.length; i++) {
+            if (this.arr[i].name === annotationName) {
+                return this.arr[i];
+            }
+        }
+    },
+    Store: function(opts) {
+        this.isBefore = true;
+        var befores = [];
+        var afters = [];
+        this.before = function(fn) {
+            befores.push(fn);
+        };
+        this.hook = function(fn) {
+            if (this.isBefore) {
+                befores.push(fn);
+            } else {
+                afters.push(fn);
+            }
+        };
+        this.after = function(fn) {
+            afters.push(fn);
+        };
+        this.next = function() {
+            var nextBeforeFn = befores.shift();
+            if (nextBeforeFn) {
+                nextBeforeFn.call(this, opts, arguments.callee);
+                return;
+            }
+            if (!nextBeforeFn && opts.pending) {
+                opts.result = opts.method.apply(opts.scope, opts.args);
+                opts.pending = !opts.pending;
+            }
+            var nextAfterFn = afters.shift();
+            if (nextAfterFn) {
+                nextAfterFn.call(this, opts, arguments.callee);
+            }
+        };
+    },
+    fireMethodAnnotations: function(annotations, storeInstance, locals) {
+
+        for (var i = 0; i < annotations.length; i++) {
+            if (typeof annotations[i] === "function") {
+                storeInstance.isBefore = false;
+                continue;
+            }
+            var preparedAnnotation = annotations[i].split(":");
+            var annotationFn = this.getAnnotation(preparedAnnotation[0]);
+            var annotationArguments = preparedAnnotation[1];
+
+            with(locals) {
+                if (annotationArguments) {
+                    eval("(" + annotationFn + ".call(storeInstance, " + annotationArguments + "))");
+                } else {
+                    eval("(" + annotationFn + ".call(storeInstance))");
+                }
+            }
+        }
+    },
+    getMethodAnnotations: function(array) {
+        return array.filter(function(item) {
+            return typeof item !== "function";
+        });
+    },
+    getAnnotatedMethod: function(array) {
+        return array.find(function(item) {
+            return typeof item === "function";
+        });
+    },
+    isValidStructure: function(array) {
+        return array instanceof Array && array.some(function(item) {
+            return typeof item === "function";
+        });
+    },
+    isValidAnnotationArray: function(array) {
+        return this.getMethodAnnotations(array)
+            .map(function(item) {
+                return item.split(":")
+                    .shift();
+            })
+            .every(this.getAnnotation, this);
+    },
+    compile: function(superClass, propertyName, propertyValue) {
+        if (!(
+                propertyValue &&
+                this.isValidStructure(propertyValue) &&
+                this.isValidAnnotationArray(propertyValue)
+            )) {
+            return propertyValue;
+        }
+
+        var selfAnnotations = this;
+
+        return function() {
+
+            var opts = {
+                scope: this,
+                parentScope: superClass.prototype,
+                method: selfAnnotations.getAnnotatedMethod(propertyValue),
+                methodName: propertyName,
+                args: Array.prototype.slice.call(arguments),
+                result: undefined,
+                pending: true
+            };
+
+            var store = new selfAnnotations.Store(opts);
+
+            selfAnnotations.fireMethodAnnotations(propertyValue, store, selfAnnotations.locals);
+
+            store.next();
+
+            return opts.result;
+        };
+    }
+};
+
+module.exports = Annotations;
+
+},{}],7:[function(require,module,exports){
+var annotations = require("./Annotations");
 
 var Class = function(sourceClass, extendedProperties, static) {
 
-  var inheritedProperties = Object.create(sourceClass.prototype);
+    var inheritedProperties = Object.create(sourceClass.prototype);
 
-  for (var propertyName in extendedProperties) {
-    inheritedProperties[propertyName] = annotations.compile(sourceClass, propertyName, extendedProperties[propertyName]);
-  }
+    for (var propertyName in extendedProperties) {
+        inheritedProperties[propertyName] = annotations.compile(sourceClass, propertyName, extendedProperties[propertyName]);
+    }
 
-  if (!static) {
-    var extendedClass = function() {
-      try {
-        if (typeof this.constructor === "function") this.constructor.apply(this, arguments);
+    if (!static) {
+        var extendedClass = function() {
+            try {
+                if (typeof this.constructor === "function") this.constructor.apply(this, arguments);
+                for (var propertyName in this) {
+                    if (typeof this[propertyName] === "function") {
+                        this[propertyName] = this[propertyName].bind(this);
+                    }
+                }
+            } finally {
+                return this;
+            }
+        };
 
-        for (var propertyName in this) {
-          if (typeof this[propertyName] === "function") {
-            this[propertyName] = this[propertyName].bind(this);
-          }
-        }
-
-      } finally {
-        return this;
-      }
-    };
-
-    extendedClass.prototype = inheritedProperties;
-    return extendedClass;
-  } else {
-    return inheritedProperties;
-  }
+        extendedClass.prototype = inheritedProperties;
+        return extendedClass;
+    } else {
+        return inheritedProperties;
+    }
 };
 
 var exp = function(mainProps) {
-  return Class(function() {}, mainProps);
+    return Class(function() {}, mainProps);
 };
 exp.inherits = Class;
 exp.static = function(mainProps) {
-  return Class(function() {}, mainProps, true);
+    return Class(function() {}, mainProps, true);
 };
 
 module.exports = exp;
 
-},{"./annotations":7}],7:[function(require,module,exports){
-module.exports = annotations = {
-  arr: [
-    function $override() {
-      this.before(function(opts, next) {
-        opts.args.unshift(opts.parentScope[opts.methodName].bind(opts.scope));
-        next();
-      });
-    }
-  ],
-  locals: {},
-  add: function(ann) {
-    this.arr.push(ann);
-  },
-  names: function() {
-    return this.arr.map(function(fn) {
-      return fn.name;
-    });
-  },
-  getAnnotation: function(annotationName) {
-    for (var i = 0; i < this.arr.length; i++) {
-      if (this.arr[i].name === annotationName) {
-        return this.arr[i];
-      }
-    }
-  },
-  Store: function(opts) {
-    var befores = [];
-    var afters = [];
-    this.before = function(fn) {
-      befores.push(fn);
-    };
-    this.after = function(fn) {
-      afters.push(fn);
-    };
-    this.next = function() {
-      var nextBeforeFn = befores.shift();
-      if (nextBeforeFn) {
-        nextBeforeFn.call(this, opts, arguments.callee);
-      }
-      if (!nextBeforeFn && opts.pending) {
-        opts.result = opts.method.apply(opts.scope, opts.args);
-        opts.pending = !opts.pending;
-      }
-      var nextAfterFn = afters.shift();
-      if (nextAfterFn) {
-        nextAfterFn.call(this, opts, arguments.callee);
-      }
-    };
-  },
-  fireMethodAnnotations: function(annotations, storeInstance, locals) {
-    for (var i = 0; i < annotations.length; i++) {
-
-      var preparedAnnotation = annotations[i].split(":");
-      var annotationFn = this.getAnnotation(preparedAnnotation[0]);
-      var annotationArguments = preparedAnnotation[1];
-
-      with(locals) {
-        if (annotationArguments) {
-          eval("(" + annotationFn + ".call(storeInstance, " + annotationArguments + "))");
-        } else {
-          eval("(" + annotationFn + ".call(storeInstance))");
-        }
-      }
-    }
-  },
-  getMethodAnnotations: function(array) {
-    return array.filter(function(e, index, arr) {
-      return index !== arr.length - 1;
-    });
-  },
-  isValidAnnotationArray: function(array) {
-    return this.getMethodAnnotations(array)
-      .map(function(item) {
-        return item.split(":").shift();
-      })
-      .every(this.getAnnotation, this);
-  },
-  compile: function(superClass, propertyName, propertyValue) {
-    if (!(
-        propertyValue &&
-        typeof propertyValue.length === "number" &&
-        typeof propertyValue[propertyValue.length - 1] === "function" &&
-        this.isValidAnnotationArray(propertyValue)
-      )) {
-      return propertyValue;
-    }
-
-    var selfAnnotations = this;
-
-    return function() {
-
-      var opts = {
-        scope: this,
-        parentScope: superClass.prototype,
-        method: propertyValue[propertyValue.length - 1],
-        methodName: propertyName,
-        args: Array.prototype.slice.call(arguments),
-        result: undefined,
-        pending: true
-      };
-
-      var store = new selfAnnotations.Store(opts);
-
-      var methodAnnotations = selfAnnotations.getMethodAnnotations(propertyValue);
-
-      selfAnnotations.fireMethodAnnotations(methodAnnotations, store, selfAnnotations.locals);
-
-      store.next();
-
-      return opts.result;
-    };
-  }
-};
-
-},{}],8:[function(require,module,exports){
+},{"./Annotations":6}],8:[function(require,module,exports){
 var EventEmitter = require("./common/EventEmitter");
 var Model = require("./Model");
 var Class = require("kaop").Class
@@ -1365,27 +1386,33 @@ var EventEmitter = require("./common/EventEmitter");
 var Class = require("kaop").Class;
 
 var Model = Class.inherits(EventEmitter, {
-  attributes: null,
-  constructor: function() {
-    this.attributes = {};
-    for (var defaultProperty in this.defaults || {}) {
-      this.attributes[defaultProperty] = this.defaults[defaultProperty];
+
+    attributes: null,
+
+    constructor: function() {
+        this.attributes = {};
+        for (var defaultProperty in this.defaults || {}) {
+            this.attributes[defaultProperty] = this.defaults[defaultProperty];
+        }
+    },
+
+    read: ["$check: 'uri'", "$GET: 'uri'", "$jsonParse", function(parsed) {
+        for (var attribute in parsed) {
+            this.attributes[attribute] = parsed[attribute];
+        }
+    }, "$fireEvent"],
+
+    display: function() {
+        return JSON.stringify(this.attributes);
+    },
+
+    set: [function(key, value) {
+        this.attributes[key] = value;
+    }, "$fireEvent"],
+
+    get: function(key) {
+        return this.attributes[key];
     }
-  },
-  load: ["$eventFire: 'load'", "$GET: 'url'", "$jsonParse: 0", function(raw) {
-    for (var attribute in raw) {
-      this.attributes[attribute] = raw[attribute];
-    }
-  }],
-  display: function() {
-    return JSON.stringify(this.attributes);
-  },
-  set: ["$eventFire: 'change'", function(key, value) {
-    this.attributes[key] = value;
-  }],
-  get: function(key) {
-    return this.attributes[key];
-  }
 });
 
 module.exports = Model;
@@ -1394,34 +1421,34 @@ module.exports = Model;
 var Class = require("kaop").Class;
 
 var EventEmitter = Class({
-  actions: [],
-  when: function(idEvent, handler) {
-    var actionStore = {
-      id: idEvent,
-      fn: handler
-    };
-    this.actions.push(actionStore);
-  },
-  fire: function(idEvent, model) {
-    for (var i = 0; i < this.actions.length; i++) {
-      if (this.actions[i].id === idEvent) {
-        if (model) {
-          this.actions[i].fn.call(model);
-        } else {
-          this.actions[i].fn();
+    actions: [],
+    when: function(idEvent, handler) {
+        var actionStore = {
+            id: idEvent,
+            fn: handler
+        };
+        this.actions.push(actionStore);
+    },
+    fire: function(idEvent, subject) {
+        for (var i = 0; i < this.actions.length; i++) {
+            if (this.actions[i].id === idEvent) {
+                if (subject) {
+                    this.actions[i].fn.call(subject);
+                } else {
+                    this.actions[i].fn();
+                }
+            }
         }
-      }
+    },
+    ignore: function(idEvent) {
+        var tmpActions = [];
+        for (var i = 0; i < this.actions.length; i++) {
+            if (this.actions[i].id !== idEvent) {
+                tmpActions.push(this.actions[i]);
+            }
+        }
+        this.actions = tmpActions;
     }
-  },
-  ignore: function(idEvent) {
-    var tmpActions = [];
-    for (var i = 0; i < this.actions.length; i++) {
-      if (this.actions[i].id !== idEvent) {
-        tmpActions.push(this.actions[i]);
-      }
-    }
-    this.actions = tmpActions;
-  }
 });
 
 module.exports = EventEmitter;
@@ -1594,58 +1621,62 @@ var Utils = Class.static({
 module.exports = Utils;
 
 },{"kaop":5}],15:[function(require,module,exports){
-var annotations = require("kaop").annotations;
+var Annotations = require("kaop").Annotations;
 
-annotations.locals.ResourceAdapter = require("./ResourceAdapter");
-annotations.locals.ejs = require("ejs");
-annotations.locals.ejs.delimiter = "?";
+Annotations.locals.$ResourceAdapter = require("./ResourceAdapter");
+Annotations.locals.$EJS = require("ejs");
+Annotations.locals.$EJS.delimiter = "?";
 
 var customAnnotations = [
-  function $jsonParse(index) {
-    this.before(function(opts, next) {
-      var parsedArgument = JSON.parse(opts.args[index]);
-      this.args.unshift(parsedArgument);
-      next();
-    });
-  },
-  function $eventFire(event) {
-    this.after(function(opts, next) {
-      opts.scope.fire(event);
-      next();
-    });
-  },
-  function $timeOut(milisec) {
-    this.after(function(opts, next) {
-      setTimeout(next, milisec);
-    });
-  },
-  function $GET(key, cached) {
-    this.before(function(opts, next) {
-      var cbk = function(raw) {
-        opts.args.push(raw);
-        next();
-      };
-      if (cached) {
-        ResourceAdapter.getCached(opts.scope[key], cbk);
-      } else {
-        ResourceAdapter.get(opts.scope[key]).then(cbk);
-      }
-    });
-  },
-  function $compileTpl(key) {
-    this.before(function(opts, next) {
-      if (!opts.scope.compileFn) {
-        opts.scope.compileFn = ejs.compile(opts.scope[key], {
-          context: opts.scope
+    function $jsonParse(index) {
+        this.before(function(opts, next) {
+            var parsedArgument = JSON.parse(opts.args[index || 0]);
+            opts.args[index || 0] = parsedArgument;
+            next();
         });
-      }
-      opts.args.unshift(opts.scope.compileFn());
-      next();
-    });
-  }
+    },
+    function $fireEvent(event) {
+        this.after(function(opts, next) {
+            opts.scope.fire(event || opts.methodName, opts.scope);
+            next();
+        });
+    },
+    function $check(attr) {
+        this.before(function(opts, next) {
+            if (!opts.scope[attr]) {
+                console.error(attr + " is not defined in " + opts.methodName, opts.scope);
+            }
+            next();
+        });
+    },
+    function $GET(key, cached) {
+        this.before(function(opts, next) {
+            var cbk = function(raw) {
+                opts.args[0] = raw;
+                next();
+            };
+            if (cached) {
+                $ResourceAdapter.getCached(opts.scope[key], cbk);
+            } else {
+                $ResourceAdapter.get(opts.scope[key]).then(cbk);
+            }
+        });
+    },
+    function $compileTpl(key) {
+        this.before(function(opts, next) {
+            if (!opts.scope.compileFn) {
+                opts.scope.compileFn = $EJS.compile(opts.scope[key], {
+                    context: opts.scope
+                });
+            }
+            opts.args.unshift(opts.scope.compileFn());
+            next();
+        });
+    }
 ];
 
 module.exports = customAnnotations;
+exports = customAnnotations;
 
 },{"./ResourceAdapter":12,"ejs":2,"kaop":5}],16:[function(require,module,exports){
 var Class = require("kaop").Class;

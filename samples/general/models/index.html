@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>base model test</title>
+  </head>
+  <body>
+
+  </body>
+  <script src="../../../dist/k2.bundle.js" charset="utf-8"></script>
+  <script type="text/javascript">
+
+    var Profile = k2.Class.inherits(k2.types.Model, {
+        uri: "api/profile.json"
+    });
+
+    var profile = new Profile;
+
+    profile.read();
+
+    profile.when("read", function(){
+        console.log(this.display());
+    });
+
+  </script>
+</html>

@@ -1,0 +1,17 @@
+<?
+this.declare({
+  "click li>a": function(e){
+    var colorIndex = colors.indexOf(e.target.getAttribute("data"));
+    colors.splice(colorIndex, 1);
+    this.invalidate();
+  }
+});
+?>
+
+<div>
+  <ol>
+    <? colors.forEach(function(color){ ?>
+      <li><span><?=color;?></span> <a href="#" data="<?=color;?>">x</a></li>
+    <? }) ?>
+  </ol>
+</div>
